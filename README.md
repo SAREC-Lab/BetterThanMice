@@ -6,7 +6,7 @@
 
 Isaiah Ritter (iritter@nd.edu)  
 Luke Siela (lsiela@nd.edu)  
-Eric Tsai (ctsai@nd.edu)  
+Eric Tsai (milktea292@gmail.com)  
 Blaise von Ohlen (bvonohle@nd.edu)
 
 ## Vision Statement
