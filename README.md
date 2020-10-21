@@ -5,8 +5,8 @@
 ## By
 
 Isaiah Ritter (iritter@nd.edu)  
-Luke Siela (lsiela@nd.edu). 
-Blaise von Ohlen(bvonohle@nd.edu)
+Luke Siela (lsiela@nd.edu)
+Eric Tsai (ctsai@nd.edu)
 
 ## Vision Statement
 
