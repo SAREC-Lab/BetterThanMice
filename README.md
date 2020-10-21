@@ -41,3 +41,6 @@ Blaise von Ohlen (bvonohle@nd.edu)
 ## User Interface Screen
 
 <center><img src="./images/user_interface.png" width="800"></center>
+
+## shortest path source code
+https://www.techiedelight.com/find-shortest-path-in-maze
