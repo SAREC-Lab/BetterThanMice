@@ -42,5 +42,5 @@ Blaise von Ohlen (bvonohle@nd.edu)
 
 <center><img src="./images/user_interface.png" width="800"></center>
 
-## Shortest Path Source Code
-https://www.techiedelight.com/find-shortest-path-in-maze
+## Sources
+- Shortest Path Source Code[https://www.techiedelight.com/find-shortest-path-in-maze]
