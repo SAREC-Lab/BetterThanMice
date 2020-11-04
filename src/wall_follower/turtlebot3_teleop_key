@@ -1,0 +1,223 @@
+#!/usr/bin/env python
+# TurtleBot Maze Solving
+##  @ Original author: Xinyi Jiang, Jiaming Xu, Ben Winschel     ##
+##  @ Revised : Celi Sun
+##  @ Oct 2017, CS department Brandeis University                ##
+
+import rospy
+import math
+
+from geometry_msgs.msg import Twist
+from sensor_msgs.msg import LaserScan
+
+class ScanTwistCenterControlNode:
+    def __init__(self, scan_topic, pub_topic, policy='LHR', helper_controller=None, **kwargs):
+
+        ##! Policy feed-in must be policy known by the center control
+        if policy not in ['LHR', 'RHR']:
+            raise ValueError('Policy Supported: \'LHR\', \'RHR\'')
+
+        self.direction = 1 if policy == 'LHR' else -1           # direction 1 for left hand rule, -1 for right hand rule
+
+        self.scan_topic_name = scan_topic
+        self.pub_topic_name = pub_topic
+        self.dis_to_wall_desired = kwargs['distance_to_wall_desired'] if 'distance_to_wall_desired' in kwargs else 0.  # Desired distance to the wall. default 0
+        self.max_speed = kwargs['max_speed'] if 'max_speed' in kwargs else 0.  # up-limit of robot speed. default 0
+
+        ##/:: Register policy
+        if policy in ['LHR', 'RHR']:
+            self.policy = LeftOrRightHandRule(type=policy)
+
+        ##/:: Register helper controller for robot movement
+        if helper_controller:
+            self.helper_controller = helper_controller(direction=self.direction, distance_to_wall=self.dis_to_wall_desired)
+
+
+        self.min_distance = 0.0  # Distance closest to robot measured
+        self.angle_with_closet_obstacle = 0.0  # Angle with the measured closest direction
+        self.distance_front = 0.0  # Distance at front of robot
+        self.scan_sub = None  # sensor subscriber, wait to be registered
+        self.cmd_vel_pub = None  # speed publisher, wait to be registered
+
+
+
+    ##! Stop the robot, clear all history, reset
+    def _reset_(self):
+        self.twist = Twist()
+        self.cmd_vel_pub(self.twist)
+
+        self.min_distance = 0.0
+        self.angle_with_closet_obstacle = 0.0
+        self.distance_front = 0.0
+
+
+    def start(self):
+
+        ##/:: Register sensor data subscriber
+        self.scan_sub = rospy.Subscriber(self.scan_topic_name, LaserScan, self._call_back)
+
+        ##/:: Register robot speed publisher
+        self.cmd_vel_pub = rospy.Publisher(self.pub_topic_name, Twist, queue_size=1)
+
+        self.twist = Twist()
+
+        while not rospy.is_shutdown():  # running until being interrupted manually
+            continue
+        self.cmd_vel_pub(Twist())  # Stop robot and exist
+
+
+
+    ## Message raw data processing,
+    ## Getting helper controller's feedback if applicable
+    def _call_back(self, msg):
+        self.twist = Twist()
+
+        ranges = [0 for i in range(360)]
+
+        ##! Deal with 360 lidar raw data,
+        ##! 0 reading when distance out of range, convert to huge data 100
+        for i in range(180):
+            if msg.ranges[i + 180] == 0:
+                ranges[i] = 100
+            else:
+                ranges[i] = msg.ranges[i + 180]
+
+            if msg.ranges[i] == 0:
+                ranges[i + 180] = 100
+            else:
+                ranges[i + 180] = msg.ranges[i]
+
+        size = len(ranges)
+
+        read_from_idx = size * (self.direction + 1) / 4  # 180-360 for direction 1 (LHR policy)
+        read_to_idx = size * (self.direction + 3) / 4  # 0-180 for direction -1 (RHR policy )
+
+        half_ranges = ranges[read_from_idx: read_to_idx]
+
+        min_idx = ranges.index(min(half_ranges))  # Get index of direction with closest distance
+
+        self.distance_front = ranges[size / 2]      # Get distance at front
+        self.min_distance = ranges[min_idx]         # Get closest distance
+        self.angle_with_closet_obstacle = (min_idx - size / 2) * msg.angle_increment  # Calculate angle of closest distance
+
+        ## Get feedback from helper controller if applicable
+        if self.helper_controller:
+            angular_z = self.helper_controller.step(self.min_distance, self.angle_with_closet_obstacle)
+
+            self.twist.angular.z += angular_z
+
+        self._execute()
+
+
+    ## Read policy and Publish action
+    def _execute(self):
+
+        space_ahead = self.distance_front // self.dis_to_wall_desired               # Get how much space ahead of robot
+
+        # Get linear(factor) and angular speed from policy
+        linear_x, angular_z = self.policy.step(space_ahead, self.angle_with_closet_obstacle)
+
+        linear_x *= self.max_speed
+
+        self.twist.linear.x += linear_x         # Set up linear speed
+        self.twist.angular.z += angular_z       # Set up angular speed
+
+        self.cmd_vel_pub.publish(self.twist)        # Action
+
+        print("Execute: ")
+        print(self.twist)
+        print("- - - - - - - - - -   ")
+
+class PDControlLoop:
+
+    def __init__(self, direction, distance_to_wall, Kp=10., Kd=5., angle_coefficient=1.):
+
+        self.direction = direction                  # 1 for LHR, -1 for RHR
+        self.distance_desired = distance_to_wall    # Desired distance to be away from wall
+        self.Kp = Kp                                # kp Constant. default 10.
+        self.Kd = Kd                                # kd Constant. default 5.
+        self.angle_coefficient = angle_coefficient
+
+        self.err_curr = 0.0                          # error: current distance - desired distance to the wall
+        self.err_prev = 0.0                          # previous error
+        self.err_deriv = 0.0                         # error derivative: current error - previous error
+        self.c = 0.0                                 # result
+
+
+
+    def step(self, distance_curr, angle_with_closet_obstacle):
+
+        self.err_curr = distance_curr - self.distance_desired      # Calculate current error
+        self.err_deriv = self.err_curr - self.err_prev             # Calculate error derivative
+
+
+        ## Calculate result from PD formula
+        self.c = self.direction * (self.Kp * self.err_curr + self.Kd * self.err_deriv) \
+                    + self.angle_coefficient * (angle_with_closet_obstacle - math.pi * self.direction / 2)
+
+        self.err_prev = self.err_curr                              # Update previous error
+
+        return self.c
+
+    
+    def print_status(self):
+
+        print("Error current    :"+ str(self.err_curr))
+        print ("Error prev      :"+ str(self.err_prev))
+        print ("Error Derivative:"+ str(self.err_deriv))
+        print("Calculated angular z:    "+ str(self.c))
+        print("- - - - - - - - - - - - - - - -  ")
+        print()
+
+class LeftOrRightHandRule:
+
+    def __init__(self, type, turn_speed= -2.0):
+
+        self.type = type
+        self.direction = 1 if type=='LHR' else -1
+        self.turn_speed = turn_speed
+        self.decision = ''
+
+
+    def step(self, space_ahead, angle_with_closet_obstacle):
+        linear_x_factor = 0.
+        angular_z = 0.
+
+        if (space_ahead < 2):
+            angular_z = self.direction * self.turn_speed            # Make turns. distance at front front less than 2 desired distance_to_wall
+            self.decision = 'Turn'
+            
+        elif (space_ahead < 4):
+            linear_x_factor = 0.5                                          # Ahead. distance at front less than 4 desired distance_to_wall
+            self.decision = 'Ahead'
+            
+        elif (math.fabs(angle_with_closet_obstacle) > 1.75):        # Slow ahead
+            linear_x_factor = 0.4
+            self.decision = 'Slow ahead'
+        else:
+            linear_x_factor = 1                                # Full speed ahead
+            self.decision = 'Full speed ahead'
+
+        self.print_status()
+        return linear_x_factor, angular_z
+    
+    def print_status(self):
+        print ("Decision: ")
+        print (self.decision)
+
+# 101 Initialize ros node
+rospy.init_node('ros_maze_bot')
+
+# Customize settings
+kwargs = {
+    'distance_to_wall_desired': 0.2,
+    'max_speed': 0.2,
+}
+
+scan_monitor = ScanTwistCenterControlNode(scan_topic="/scan", pub_topic="cmd_vel",
+                                          policy='LHR', helper_controller= PDControlLoop, **kwargs)
+#run
+if __name__ == "__main__":
+
+    scan_monitor.start()
+
