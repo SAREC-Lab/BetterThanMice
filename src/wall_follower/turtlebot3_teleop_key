@@ -192,7 +192,7 @@ class LeftOrRightHandRule:
             self.decision = 'Ahead'
             
         elif (math.fabs(angle_with_closet_obstacle) > 1.75):        # Slow ahead
-            linear_x_factor = 0.4
+            linear_x_factor = 0.3
             self.decision = 'Slow ahead'
         else:
             linear_x_factor = 1                                # Full speed ahead
@@ -210,8 +210,8 @@ rospy.init_node('ros_maze_bot')
 
 # Customize settings
 kwargs = {
-    'distance_to_wall_desired': 0.2,
-    'max_speed': 0.2,
+    'distance_to_wall_desired': 0.15,
+    'max_speed': 0.1,
 }
 
 scan_monitor = ScanTwistCenterControlNode(scan_topic="/scan", pub_topic="cmd_vel",
@@ -220,4 +220,5 @@ scan_monitor = ScanTwistCenterControlNode(scan_topic="/scan", pub_topic="cmd_vel
 if __name__ == "__main__":
 
     scan_monitor.start()
+
 
