@@ -5,12 +5,17 @@ import json
 import os
 import re
 import numpy
+import subprocess
+import rospy
+from geometry_msgs.msg import Twist
+import thread
 
 class DictionaryController(object):
     # this is a controller class, which holds event handlers
     # constructor
-    def __init__(self):
+    def __init__(self, pub):
         self.myd = dict()
+        self.pub = pub
 
     def get_value(self, key):
         return self.myd[key]
@@ -63,7 +68,8 @@ class DictionaryController(object):
     def GET_MAP(self):
         output = {'result' : 'success'}
         try:
-            os.system('rosrun map_server map_saver -f ~/map')
+            # os.system('rosrun map_server map_saver -f ~/map')
+            pass
         except Error as err:
             output['message'] = str(err)
 
@@ -74,7 +80,7 @@ class DictionaryController(object):
             output['message']['map']['pgm'] = []
             image_path = None
 
-            with open('/home/iritter/map.yaml', 'r') as f:
+            with open('/home/gazebo/map.yaml', 'r') as f:
                 for line in f.readlines():
                     output['message']['map']['yaml'].append(line.strip())
                     if line.strip():
@@ -97,5 +103,54 @@ class DictionaryController(object):
     
     def GET_TEST_CONNECT(self):
         output = {'message': 'success'}
+
+        return json.dumps(output)
+
+    def makeSimpleProfile(self, output, input, slop):
+        if input > output:
+            output = min( input, output + slop )
+        elif input < output:
+            output = max( input, output - slop )
+        else:
+            output = input
+
+        return output
+
+    def STOP(self):
+        output = {'message': 'success'}
+        # os.system("rostopic pub /turtle1/cmd_vel geometry_msgs/Twist -r 1 -- '[0.0, 0.0, 0.0]' '[0.0, 0.0, 0.0]'")
+        try:
+            # subprocess.call("rostopic pub /turtle1/cmd_vel geometry_msgs/Twist -r 1 -- '[0.0, 0.0, 0.0]' '[0.0, 0.0, 0.0]'", shell=True)
+            # os.system("rostopic pub /turtle/cmd_vel geometry_msgs/Twist -r 1 -- '[0.0, 0.0, 0.0]' '[0.0, 0.0, 0.0]'")
+            os.system('pkill -9 -f teleop')
+
+            target_linear_vel   = 0.0
+            control_linear_vel  = 0.0
+            target_angular_vel  = 0.0
+            control_angular_vel = 0.0
+
+            LIN_VEL_STEP_SIZE = 0.01
+            ANG_VEL_STEP_SIZE = 0.1
+
+            twist = Twist()
+
+            control_linear_vel = self.makeSimpleProfile(control_linear_vel, target_linear_vel, (LIN_VEL_STEP_SIZE/2.0))
+            twist.linear.x = control_linear_vel; twist.linear.y = 0.0; twist.linear.z = 0.0
+
+            control_angular_vel = self.makeSimpleProfile(control_angular_vel, target_angular_vel, (ANG_VEL_STEP_SIZE/2.0))
+            twist.angular.x = 0.0; twist.angular.y = 0.0; twist.angular.z = control_angular_vel
+
+            self.pub.publish(twist)
+        except IOError as err:
+            output['message'] = str(err)
+
+        return json.dumps(output)
+
+    def START(self):
+        output = {'message': 'success'}
+        try:
+            thread.start_new_thread(os.system, ('roslaunch turtlebot3_teleop turtlebot3_teleop_key.launch',))
+        except IOError as err:
+            output['message'] = str(err)
 
         return json.dumps(output)
