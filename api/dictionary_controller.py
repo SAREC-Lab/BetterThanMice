@@ -8,14 +8,18 @@ import numpy
 import subprocess
 import rospy
 from geometry_msgs.msg import Twist
+from std_msgs.msg import Empty
 import thread
+from time import time
 
 class DictionaryController(object):
+    state = 'stopped'
     # this is a controller class, which holds event handlers
     # constructor
-    def __init__(self, pub):
+    def __init__(self, pub, tbot):
         self.myd = dict()
         self.pub = pub
+        self.tbot = tbot
 
     def get_value(self, key):
         return self.myd[key]
@@ -67,37 +71,37 @@ class DictionaryController(object):
     # event handlers for resource requests
     def GET_MAP(self):
         output = {'result' : 'success'}
-        try:
-            # os.system('rosrun map_server map_saver -f ~/map')
-            pass
-        except Error as err:
-            output['message'] = str(err)
+        if self.state == 'running':
+            try:
+                os.system('rosrun map_server map_saver -f ~/map')
+                pass
+            except Error as err:
+                output['message'] = str(err)
 
-        try:
-            output['message'] = {}
-            output['message']['map'] = {}
-            output['message']['map']['yaml'] = []
-            output['message']['map']['pgm'] = []
-            image_path = None
+            try:
+                output['message'] = {}
+                output['message']['map'] = {}
+                output['message']['map']['yaml'] = []
+                output['message']['map']['pgm'] = []
+                image_path = None
 
-            with open('/home/gazebo/map.yaml', 'r') as f:
-                for line in f.readlines():
-                    output['message']['map']['yaml'].append(line.strip())
-                    if line.strip():
-                        key, value = line.strip().split(': ')
-                        if key == 'image':
-                            image_path = value
+                with open('/home/gazebo/map.yaml', 'r') as f:
+                    for line in f.readlines():
+                        output['message']['map']['yaml'].append(line.strip())
+                        if line.strip():
+                            key, value = line.strip().split(': ')
+                            if key == 'image':
+                                image_path = value
 
-            output['message']['image_path'] = image_path
+                output['message']['image_path'] = image_path
 
-            if image_path:
-                # f = open(image_path, 'rb')
-                im = self.read_pgm(image_path, byteorder='<')
-                output['message']['map']['pgm'] = im.tolist()
-                # f.close()
-                
-        except IOError as err:
-            output['message'] = str(err)
+                if image_path:
+                    im = self.read_pgm(image_path, byteorder='<')
+                    output['message']['map']['pgm'] = im.tolist()
+
+                    
+            except IOError as err:
+                output['message'] = str(err)
 
         return json.dumps(output)
     
@@ -105,6 +109,30 @@ class DictionaryController(object):
         output = {'message': 'success'}
 
         return json.dumps(output)
+
+    def GET_CURRENT_POSITION(self):
+        output = {'message': 'success'}
+
+        with open('/home/gazebo/tf.txt') as f:
+            lines = f.readlines()
+            latest_time = 0
+            latest_time_index = 0
+            for i, line in enumerate(lines):
+                if "At time" in line:
+                    time = float(line.split(" ")[-1])
+                    if time > latest_time:
+                        latest_time = time
+                        latest_time_index = i
+            
+            wanted_line = lines[latest_time_index + 1]
+            translation = wanted_line.split(': [')[-1]
+            x = float(translation.split(', ')[0])
+            y = float(translation.split(', ')[1])
+
+        output['data'] = {'x': x, 'y': y}
+        
+        return json.dumps(output)
+
 
     def makeSimpleProfile(self, output, input, slop):
         if input > output:
@@ -118,11 +146,11 @@ class DictionaryController(object):
 
     def STOP(self):
         output = {'message': 'success'}
-        # os.system("rostopic pub /turtle1/cmd_vel geometry_msgs/Twist -r 1 -- '[0.0, 0.0, 0.0]' '[0.0, 0.0, 0.0]'")
-        try:
-            # subprocess.call("rostopic pub /turtle1/cmd_vel geometry_msgs/Twist -r 1 -- '[0.0, 0.0, 0.0]' '[0.0, 0.0, 0.0]'", shell=True)
-            # os.system("rostopic pub /turtle/cmd_vel geometry_msgs/Twist -r 1 -- '[0.0, 0.0, 0.0]' '[0.0, 0.0, 0.0]'")
+        try:            
+
             os.system('pkill -9 -f teleop')
+            os.system('pkill -9 -f slam')
+            os.system('pkill -9 -f base_link')
 
             target_linear_vel   = 0.0
             control_linear_vel  = 0.0
@@ -143,14 +171,16 @@ class DictionaryController(object):
             self.pub.publish(twist)
         except IOError as err:
             output['message'] = str(err)
-
+        self.state = 'stopped'
         return json.dumps(output)
 
     def START(self):
         output = {'message': 'success'}
         try:
             thread.start_new_thread(os.system, ('roslaunch turtlebot3_teleop turtlebot3_teleop_key.launch',))
+            thread.start_new_thread(os.system, ('roslaunch turtlebot3_slam turtlebot3_slam.launch slam_methods:=gmapping',))
+            thread.start_new_thread(os.system, ('rosrun tf tf_echo /map /base_link > /home/gazebo/tf.txt',))
         except IOError as err:
             output['message'] = str(err)
-
+        self.state = 'running'
         return json.dumps(output)

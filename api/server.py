@@ -7,9 +7,9 @@ from sys import argv
 import rospy
 from geometry_msgs.msg import Twist
 
-def start_service(ip_address, port_number, pub):
+def start_service(ip_address, port_number, pub, tbot):
     '''configures and runs the server'''
-    dCon = DictionaryController(pub) # object
+    dCon = DictionaryController(pub, tbot) # object
 
     dispatcher = cherrypy.dispatch.RoutesDispatcher() # dispatcher object
     # we will use this to connect endpoints to controllers
@@ -20,6 +20,7 @@ def start_service(ip_address, port_number, pub):
     dispatcher.connect('dict_get_test_connect', '/', controller=dCon, action='GET_TEST_CONNECT', conditions=dict(method=['GET']))
     dispatcher.connect('dict_post_stop', '/stop/', controller=dCon, action='STOP', conditions=dict(method=['POST']))
     dispatcher.connect('dict_post_stop', '/start/', controller=dCon, action='START', conditions=dict(method=['POST']))
+    dispatcher.connect('dict_get_position', '/currentPosition/', controller=dCon, action='GET_CURRENT_POSITION', conditions=dict(method=['GET']))
     
     # configuration for the server
     conf = {
@@ -45,6 +46,10 @@ if __name__ == '__main__':
         if arg == '--port':
             port_number = int(argv[i + 1])
 
-    rospy.init_node('ros_maze_bot')
+    # tbot_ip_address = '10.7.62.216'
+    # tbot = turtlebot(tbot_ip_address)
+    tbot = None
+    rospy.init_node('ros_maze_bot_wall_follower', anonymous=True)
     pub = rospy.Publisher('cmd_vel', Twist, queue_size=10)
-    start_service(ip_address, port_number, pub)
+    # reset_odom_pub = rospy.Publisher('')
+    start_service(ip_address, port_number, pub, tbot)
