@@ -42,10 +42,12 @@ Blaise von Ohlen (bvonohle@nd.edu)
 
 <center><img src="./images/user_interface.png" width="800"></center>
 
-## Sources
+## Sources We Used
 
 - [Shortest Path Source Code](https://www.techiedelight.com/find-shortest-path-in-maze)
 
-## Sister Application(s)
+## Other Resources for this Project
 
 - [Mobile Application](https://github.com/Ritter99/BetterThanMiceMobile)
+- [Website](https://ctsai37.wixsite.com/website)
+- [Demo Video](https://youtu.be/JMo7z_NuBE0)
