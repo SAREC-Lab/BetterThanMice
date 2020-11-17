@@ -38,7 +38,7 @@ Blaise von Ohlen (bvonohle@nd.edu)
 
 <center><img src="./images/high_level_architecture.png" width="600"></center>
 
-## User Interface Screen
+## User Interface Screen (Concept)
 
 <center><img src="./images/user_interface.png" width="800"></center>
 
