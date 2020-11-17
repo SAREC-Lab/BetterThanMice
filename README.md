@@ -45,3 +45,4 @@ Blaise von Ohlen (bvonohle@nd.edu)
 ## Sources
 
 - [Shortest Path Source Code](https://www.techiedelight.com/find-shortest-path-in-maze)
+- [Mobile Application](https://github.com/Ritter99/BetterThanMiceMobile)
